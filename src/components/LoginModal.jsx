@@ -1,3 +1,5 @@
+// Note: getClaudeCliPath is a server-side utility and cannot be used here directly.
+// The command string 'claude' will be intercepted by the server and replaced with the configured path.
 import { X } from 'lucide-react';
 import StandaloneShell from './StandaloneShell';
 

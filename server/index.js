@@ -76,6 +76,7 @@ import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { getClaudeCliPath } from './utils/agents_cli.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -1002,10 +1003,18 @@ function handleShellConnection(ws) {
                     let shellCommand;
                     if (isPlainShell) {
                         // Plain shell mode - just run the initial command in the project directory
+                        let command = initialCommand;
+                        
+                        // If command starts with 'claude ', replace it with the configured path
+                        if (command && command.trim().startsWith('claude ')) {
+                            const claudePath = getClaudeCliPath();
+                            command = command.replace(/^claude\s+/, `${claudePath} `);
+                        }
+                        
                         if (os.platform() === 'win32') {
-                            shellCommand = `Set-Location -Path "${projectPath}"; ${initialCommand}`;
+                            shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
                         } else {
-                            shellCommand = `cd "${projectPath}" && ${initialCommand}`;
+                            shellCommand = `cd "${projectPath}" && ${command}`;
                         }
                     } else if (provider === 'cursor') {
                         // Use cursor-agent command
@@ -1024,17 +1033,24 @@ function handleShellConnection(ws) {
                         }
                     } else {
                         // Use claude command (default) or initialCommand if provided
-                        const command = initialCommand || 'claude';
+                        const claudePath = getClaudeCliPath();
+                        let command = initialCommand || claudePath;
+                        
+                        // If initialCommand starts with 'claude ', replace it with the configured path
+                        if (initialCommand && initialCommand.trim().startsWith('claude ')) {
+                            command = initialCommand.replace(/^claude\s+/, `${claudePath} `);
+                        }
+
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${claudePath} --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { ${claudePath} }`;
                             } else {
                                 shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
                             }
                         } else {
                             if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
+                                shellCommand = `cd "${projectPath}" && ${claudePath} --resume ${sessionId} || ${claudePath}`;
                             } else {
                                 shellCommand = `cd "${projectPath}" && ${command}`;
                             }
