@@ -36,6 +36,7 @@ interface SlashCommand {
 
 interface ChatComposerProps {
   pendingPermissionRequests: PendingPermissionRequest[];
+  permissionCountdowns: Record<string, number>;
   handlePermissionDecision: (
     requestIds: string | string[],
     decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
@@ -95,6 +96,7 @@ interface ChatComposerProps {
 
 export default function ChatComposer({
   pendingPermissionRequests,
+  permissionCountdowns,
   handlePermissionDecision,
   handleGrantToolPermission,
   claudeStatus,
@@ -178,6 +180,7 @@ export default function ChatComposer({
       <div className="max-w-4xl mx-auto mb-3">
         <PermissionRequestsBanner
           pendingPermissionRequests={pendingPermissionRequests}
+          permissionCountdowns={permissionCountdowns}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
         />

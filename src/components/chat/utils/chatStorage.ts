@@ -82,6 +82,8 @@ export function getClaudeSettings(): ClaudeSettings {
       disallowedTools: [],
       skipPermissions: false,
       projectSortOrder: 'name',
+      permissionTimeoutMode: 'duration',
+      permissionTimeout: 60,
     };
   }
 
@@ -93,6 +95,8 @@ export function getClaudeSettings(): ClaudeSettings {
       disallowedTools: Array.isArray(parsed.disallowedTools) ? parsed.disallowedTools : [],
       skipPermissions: Boolean(parsed.skipPermissions),
       projectSortOrder: parsed.projectSortOrder || 'name',
+      permissionTimeoutMode: parsed.permissionTimeoutMode ?? 'duration',
+      permissionTimeout: parsed.permissionTimeout ?? 60,
     };
   } catch {
     return {
@@ -100,6 +104,8 @@ export function getClaudeSettings(): ClaudeSettings {
       disallowedTools: [],
       skipPermissions: false,
       projectSortOrder: 'name',
+      permissionTimeoutMode: 'duration',
+      permissionTimeout: 60,
     };
   }
 }

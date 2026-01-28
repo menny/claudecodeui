@@ -23,8 +23,21 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   const [codexModel, setCodexModel] = useState<string>(() => {
     return localStorage.getItem('codex-model') || CODEX_MODELS.DEFAULT;
   });
+  const [permissionCountdowns, setPermissionCountdowns] = useState<Record<string, number>>({});
+  const countdownIntervalsRef = useRef<Record<string, number>>({});
 
   const lastProviderRef = useRef(provider);
+
+  // Cleanup countdown intervals on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(countdownIntervalsRef.current).forEach(intervalId => {
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      });
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedSession?.id) {
@@ -110,5 +123,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    permissionCountdowns,
+    setPermissionCountdowns,
+    countdownIntervalsRef,
   };
 }

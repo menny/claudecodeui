@@ -40,6 +40,8 @@ interface UseChatRealtimeHandlersArgs {
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   setIsSystemSessionChange: (isSystemSessionChange: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  setPermissionCountdowns: Dispatch<SetStateAction<Record<string, number>>>;
+  countdownIntervalsRef: MutableRefObject<Record<string, number>>;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
   streamBufferRef: MutableRefObject<string>;
   streamTimerRef: MutableRefObject<number | null>;
@@ -105,6 +107,8 @@ export function useChatRealtimeHandlers({
   setTokenBudget,
   setIsSystemSessionChange,
   setPendingPermissionRequests,
+  setPermissionCountdowns,
+  countdownIntervalsRef,
   pendingViewSessionRef,
   streamBufferRef,
   streamTimerRef,
@@ -454,17 +458,50 @@ export function useChatRealtimeHandlers({
             if (previous.some((request) => request.requestId === requestId)) {
               return previous;
             }
-            return [
-              ...previous,
-              {
-                requestId,
-                toolName: latestMessage.toolName || 'UnknownTool',
-                input: latestMessage.input,
-                context: latestMessage.context,
-                sessionId: latestMessage.sessionId || null,
-                receivedAt: new Date(),
-              },
-            ];
+            const newRequest = {
+              requestId,
+              toolName: latestMessage.toolName || 'UnknownTool',
+              input: latestMessage.input,
+              context: latestMessage.context,
+              sessionId: latestMessage.sessionId || null,
+              receivedAt: new Date(),
+              timeoutSeconds: latestMessage.timeoutSeconds ?? null,
+            };
+
+            // Start countdown if timeout is set
+            if (latestMessage.timeoutSeconds && latestMessage.timeoutSeconds > 0) {
+              setPermissionCountdowns(prev => ({
+                ...prev,
+                [requestId]: latestMessage.timeoutSeconds
+              }));
+
+              // Clear any existing interval for this request
+              if (countdownIntervalsRef.current[requestId]) {
+                clearInterval(countdownIntervalsRef.current[requestId]);
+              }
+
+              // Start countdown interval
+              countdownIntervalsRef.current[requestId] = window.setInterval(() => {
+                setPermissionCountdowns(prev => {
+                  const remaining = prev[requestId];
+                  if (remaining === undefined || remaining <= 1) {
+                    // Countdown complete, clear interval
+                    if (countdownIntervalsRef.current[requestId]) {
+                      clearInterval(countdownIntervalsRef.current[requestId]);
+                      delete countdownIntervalsRef.current[requestId];
+                    }
+                    const { [requestId]: _, ...rest } = prev;
+                    return rest;
+                  }
+                  return {
+                    ...prev,
+                    [requestId]: remaining - 1
+                  };
+                });
+              }, 1000);
+            }
+
+            return [...previous, newRequest];
           });
         }
 
@@ -481,9 +518,23 @@ export function useChatRealtimeHandlers({
         if (!latestMessage.requestId) {
           break;
         }
-        setPendingPermissionRequests((previous) =>
-          previous.filter((request) => request.requestId !== latestMessage.requestId),
-        );
+        {
+          const requestId = latestMessage.requestId;
+
+          // Clear countdown timer
+          if (countdownIntervalsRef.current[requestId]) {
+            clearInterval(countdownIntervalsRef.current[requestId]);
+            delete countdownIntervalsRef.current[requestId];
+          }
+          setPermissionCountdowns(prev => {
+            const { [requestId]: _, ...rest } = prev;
+            return rest;
+          });
+
+          setPendingPermissionRequests((previous) =>
+            previous.filter((request) => request.requestId !== requestId),
+          );
+        }
         break;
 
       case 'claude-error':

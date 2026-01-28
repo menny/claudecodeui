@@ -15,7 +15,7 @@ import { authenticatedFetch } from '../../../utils/api';
 import { thinkingModes } from '../constants/thinkingModes';
 
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
-import { safeLocalStorage } from '../utils/chatStorage';
+import { safeLocalStorage, getClaudeSettings } from '../utils/chatStorage';
 import type {
   ChatMessage,
   PendingPermissionRequest,
@@ -602,6 +602,17 @@ export function useChatComposerState({
           },
         });
       } else {
+        // Calculate timeout value for Claude
+        let permissionTimeout = null;
+        const settings = getClaudeSettings();
+        const timeoutMode = settings.permissionTimeoutMode ?? 'duration';
+        if (timeoutMode === 'never') {
+          permissionTimeout = null;
+        } else {
+          const seconds = settings.permissionTimeout ?? 60;
+          permissionTimeout = seconds * 1000; // Convert to milliseconds
+        }
+
         sendMessage({
           type: 'claude-command',
           command: messageContent,
@@ -610,7 +621,10 @@ export function useChatComposerState({
             cwd: resolvedProjectPath,
             sessionId: effectiveSessionId,
             resume: Boolean(effectiveSessionId),
-            toolsSettings,
+            toolsSettings: {
+              ...toolsSettings,
+              permissionTimeout: permissionTimeout
+            },
             permissionMode,
             model: claudeModel,
             images: uploadedImages,

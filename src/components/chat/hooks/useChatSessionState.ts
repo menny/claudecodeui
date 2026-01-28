@@ -182,6 +182,53 @@ export function useChatSessionState({
     container.scrollTop = container.scrollHeight;
   }, []);
 
+  const scrollToPreviousUserMessage = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+
+    const container = scrollContainerRef.current;
+    const viewportTop = container.scrollTop;
+    const messageElements = Array.from(container.querySelectorAll('.chat-message.user'));
+
+    if (messageElements.length === 0) return;
+
+    // Find the previous user message that is completely above the current viewport
+    let targetMessage = null;
+
+    // First, look for a message whose bottom is completely above viewport
+    for (let i = messageElements.length - 1; i >= 0; i--) {
+      const messageTop = (messageElements[i] as HTMLElement).offsetTop;
+      const messageBottom = messageTop + (messageElements[i] as HTMLElement).offsetHeight;
+
+      if (messageBottom < viewportTop - 20) {
+        targetMessage = messageElements[i] as HTMLElement;
+        break;
+      }
+    }
+
+    // If none found, look for a message that starts above viewport
+    if (!targetMessage) {
+      for (let i = messageElements.length - 1; i >= 0; i--) {
+        if ((messageElements[i] as HTMLElement).offsetTop < viewportTop - 20) {
+          targetMessage = messageElements[i] as HTMLElement;
+          break;
+        }
+      }
+    }
+
+    // If still none, use the first message
+    if (!targetMessage) {
+      targetMessage = messageElements[0] as HTMLElement;
+    }
+
+    // Scroll to the target message with offset
+    if (targetMessage) {
+      const newScrollTop = Math.max(0, targetMessage.offsetTop - 20);
+      if (Math.abs(newScrollTop - container.scrollTop) > 5) {
+        container.scrollTop = newScrollTop;
+      }
+    }
+  }, []);
+
   const isNearBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) {
@@ -604,6 +651,7 @@ export function useChatSessionState({
     createDiff,
     scrollContainerRef,
     scrollToBottom,
+    scrollToPreviousUserMessage,
     isNearBottom,
     handleScroll,
     loadSessionMessages,

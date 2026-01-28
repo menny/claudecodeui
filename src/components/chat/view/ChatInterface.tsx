@@ -68,6 +68,9 @@ function ChatInterface({
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    permissionCountdowns,
+    setPermissionCountdowns,
+    countdownIntervalsRef,
   } = useChatProviderState({
     selectedSession,
   });
@@ -201,6 +204,8 @@ function ChatInterface({
     setTokenBudget,
     setIsSystemSessionChange,
     setPendingPermissionRequests,
+    setPermissionCountdowns,
+    countdownIntervalsRef,
     pendingViewSessionRef,
     streamBufferRef,
     streamTimerRef,
@@ -310,6 +315,7 @@ function ChatInterface({
 
         <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}
+          permissionCountdowns={permissionCountdowns}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
           claudeStatus={claudeStatus}

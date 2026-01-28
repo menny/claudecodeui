@@ -38,6 +38,7 @@ function waitForToolApproval(requestId, options = {}) {
 
   return new Promise(resolve => {
     let settled = false;
+    let timeout;
 
     const finalize = (decision) => {
       if (settled) return;
@@ -45,8 +46,6 @@ function waitForToolApproval(requestId, options = {}) {
       cleanup();
       resolve(decision);
     };
-
-    let timeout;
 
     const cleanup = () => {
       pendingToolApprovals.delete(requestId);
@@ -56,7 +55,7 @@ function waitForToolApproval(requestId, options = {}) {
       }
     };
 
-    // timeoutMs 0 = wait indefinitely (interactive tools)
+    // timeoutMs 0 or less (like null) = wait indefinitely
     if (timeoutMs > 0) {
       timeout = setTimeout(() => {
         onCancel?.('timeout');
@@ -178,6 +177,24 @@ function mapCliOptionsToSDK(options = {}) {
   sdkOptions.tools = { type: 'preset', preset: 'claude_code' };
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
+
+  // Map permission timeout settings
+  // If undefined, it will fall back to default in waitForToolApproval
+  sdkOptions.permissionTimeout = settings.permissionTimeout;
+
+  // Validate timeout bounds (5 seconds to 1 day)
+  if (sdkOptions.permissionTimeout !== null && sdkOptions.permissionTimeout !== undefined && sdkOptions.permissionTimeout > 0) {
+    const MIN_TIMEOUT = 5000;      // 5 seconds
+    const MAX_TIMEOUT = 86400000;  // 1 day (24 hours * 60 minutes * 60 seconds * 1000ms)
+
+    if (sdkOptions.permissionTimeout < MIN_TIMEOUT) {
+      console.warn(`Permission timeout ${sdkOptions.permissionTimeout}ms is below minimum, setting to ${MIN_TIMEOUT}ms`);
+      sdkOptions.permissionTimeout = MIN_TIMEOUT;
+    } else if (sdkOptions.permissionTimeout > MAX_TIMEOUT) {
+      console.warn(`Permission timeout ${sdkOptions.permissionTimeout}ms exceeds maximum, setting to ${MAX_TIMEOUT}ms`);
+      sdkOptions.permissionTimeout = MAX_TIMEOUT;
+    }
+  }
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
@@ -500,11 +517,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
         requestId,
         toolName,
         input,
-        sessionId: capturedSessionId || sessionId || null
+        sessionId: capturedSessionId || sessionId || null,
+        timeoutSeconds: sdkOptions.permissionTimeout ? Math.floor(sdkOptions.permissionTimeout / 1000) : null
       });
 
       const decision = await waitForToolApproval(requestId, {
-        timeoutMs: requiresInteraction ? 0 : undefined,
+        timeoutMs: requiresInteraction ? 0 : sdkOptions.permissionTimeout,
         signal: context?.signal,
         onCancel: (reason) => {
           ws.send({

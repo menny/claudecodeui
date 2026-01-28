@@ -9,6 +9,7 @@ registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
 
 interface PermissionRequestsBannerProps {
   pendingPermissionRequests: PendingPermissionRequest[];
+  permissionCountdowns: Record<string, number>;
   handlePermissionDecision: (
     requestIds: string | string[],
     decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
@@ -18,6 +19,7 @@ interface PermissionRequestsBannerProps {
 
 export default function PermissionRequestsBanner({
   pendingPermissionRequests,
+  permissionCountdowns,
   handlePermissionDecision,
   handleGrantToolPermission,
 }: PermissionRequestsBannerProps) {
@@ -53,21 +55,38 @@ export default function PermissionRequestsBanner({
               .map((item) => item.requestId)
           : [request.requestId];
 
+        const countdown = permissionCountdowns[request.requestId];
+
         return (
           <div
             key={request.requestId}
             className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 shadow-sm"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
+              <div className="flex-1">
                 <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">Permission required</div>
                 <div className="text-xs text-amber-800 dark:text-amber-200">
                   Tool: <span className="font-mono">{request.toolName}</span>
                 </div>
+                {permissionEntry && (
+                  <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                    Allow rule: <span className="font-mono">{permissionEntry}</span>
+                  </div>
+                )}
               </div>
-              {permissionEntry && (
-                <div className="text-xs text-amber-700 dark:text-amber-300">
-                  Allow rule: <span className="font-mono">{permissionEntry}</span>
+
+              {countdown !== undefined && (
+                <div className="flex flex-col items-end">
+                  <div className="text-xs text-amber-600 dark:text-amber-400 mb-1">
+                    Time remaining
+                  </div>
+                  <div className={`text-lg font-mono font-bold px-3 py-1 rounded transition-colors ${
+                    countdown <= 10
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                      : 'bg-amber-100 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200'
+                  }`}>
+                    {countdown}s
+                  </div>
                 </div>
               )}
             </div>

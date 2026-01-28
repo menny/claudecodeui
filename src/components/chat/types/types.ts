@@ -40,6 +40,8 @@ export interface ClaudeSettings {
   disallowedTools: string[];
   skipPermissions: boolean;
   projectSortOrder: string;
+  permissionTimeoutMode?: 'duration' | 'never';
+  permissionTimeout?: number;
   lastUpdated?: string;
   [key: string]: unknown;
 }
@@ -63,6 +65,7 @@ export interface PendingPermissionRequest {
   context?: unknown;
   sessionId?: string | null;
   receivedAt?: Date;
+  timeoutSeconds?: number | null;
 }
 
 export interface QuestionOption {
