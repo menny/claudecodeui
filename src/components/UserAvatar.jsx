@@ -58,15 +58,15 @@ function UserAvatar() {
     : getInitialFromUsername(user?.username);
 
   return (
-    <div className="flex flex-col items-center gap-1">
-      {/* Avatar Circle */}
-      <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
-        {initials}
-      </div>
-
+    <div className="flex items-center space-x-3">
       {/* Username Label */}
       <div className="text-sm font-medium text-gray-900 dark:text-white">
         {user?.username || 'User'}
+      </div>
+
+      {/* Avatar Circle */}
+      <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+        {initials}
       </div>
     </div>
   );
