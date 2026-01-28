@@ -28,6 +28,7 @@ import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
 import CodexLogo from './CodexLogo.jsx';
+import UserAvatar from './UserAvatar.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { useTranslation } from 'react-i18next';
@@ -574,8 +575,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             </div>
           </div>
           {!isGrouped && (
-            <div className="hidden sm:flex w-8 h-8 bg-blue-600 rounded-full items-center justify-center text-white text-sm flex-shrink-0">
-              U
+            <div className="hidden sm:flex">
+              <UserAvatar />
             </div>
           )}
         </div>
