@@ -255,7 +255,9 @@ function getClaudeSettings() {
       allowedTools: [],
       disallowedTools: [],
       skipPermissions: false,
-      projectSortOrder: 'name'
+      projectSortOrder: 'name',
+      permissionTimeoutMode: 'duration',
+      permissionTimeout: 60
     };
   }
 
@@ -266,14 +268,18 @@ function getClaudeSettings() {
       allowedTools: Array.isArray(parsed.allowedTools) ? parsed.allowedTools : [],
       disallowedTools: Array.isArray(parsed.disallowedTools) ? parsed.disallowedTools : [],
       skipPermissions: Boolean(parsed.skipPermissions),
-      projectSortOrder: parsed.projectSortOrder || 'name'
+      projectSortOrder: parsed.projectSortOrder || 'name',
+      permissionTimeoutMode: parsed.permissionTimeoutMode ?? 'duration',
+      permissionTimeout: parsed.permissionTimeout ?? 60
     };
   } catch {
     return {
       allowedTools: [],
       disallowedTools: [],
       skipPermissions: false,
-      projectSortOrder: 'name'
+      projectSortOrder: 'name',
+      permissionTimeoutMode: 'duration',
+      permissionTimeout: 60
     };
   }
 }
@@ -1892,6 +1898,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // These are not persisted and do not survive a page refresh; introduced so
   // the UI can present pending approvals while the SDK waits.
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState([]);
+  // Countdown timers for permission requests (requestId -> remainingSeconds)
+  const [permissionCountdowns, setPermissionCountdowns] = useState({});
+  const countdownIntervalsRef = useRef({});
   const [attachedImages, setAttachedImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(new Map());
   const [imageErrors, setImageErrors] = useState(new Map());
@@ -1956,6 +1965,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
     streamBufferRef.current = '';
   }, []);
+
+  // Cleanup countdown intervals on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      Object.values(countdownIntervalsRef.current).forEach(intervalId => {
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      });
+    };
+  }, []);
+
   // Load permission mode for the current session
   useEffect(() => {
     if (selectedSession?.id) {
@@ -3600,6 +3621,40 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             ];
           });
 
+          // Start countdown if timeout is set
+          if (latestMessage.timeoutSeconds && latestMessage.timeoutSeconds > 0) {
+            const requestId = latestMessage.requestId;
+            setPermissionCountdowns(prev => ({
+              ...prev,
+              [requestId]: latestMessage.timeoutSeconds
+            }));
+
+            // Clear any existing interval for this request
+            if (countdownIntervalsRef.current[requestId]) {
+              clearInterval(countdownIntervalsRef.current[requestId]);
+            }
+
+            // Start countdown interval
+            countdownIntervalsRef.current[requestId] = setInterval(() => {
+              setPermissionCountdowns(prev => {
+                const remaining = prev[requestId];
+                if (remaining === undefined || remaining <= 1) {
+                  // Countdown complete, clear interval
+                  if (countdownIntervalsRef.current[requestId]) {
+                    clearInterval(countdownIntervalsRef.current[requestId]);
+                    delete countdownIntervalsRef.current[requestId];
+                  }
+                  const { [requestId]: _, ...rest } = prev;
+                  return rest;
+                }
+                return {
+                  ...prev,
+                  [requestId]: remaining - 1
+                };
+              });
+            }, 1000);
+          }
+
           // Keep the session in a "waiting" state while approval is pending.
           // This does not resume the run; it only updates the UI status so the
           // user knows Claude is blocked on a decision.
@@ -3620,7 +3675,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (!latestMessage.requestId) {
             break;
           }
-          setPendingPermissionRequests(prev => prev.filter(req => req.requestId !== latestMessage.requestId));
+          const requestId = latestMessage.requestId;
+
+          // Clear countdown timer
+          if (countdownIntervalsRef.current[requestId]) {
+            clearInterval(countdownIntervalsRef.current[requestId]);
+            delete countdownIntervalsRef.current[requestId];
+          }
+          setPermissionCountdowns(prev => {
+            const { [requestId]: _, ...rest } = prev;
+            return rest;
+          });
+
+          setPendingPermissionRequests(prev => prev.filter(req => req.requestId !== requestId));
           break;
         }
 
@@ -4505,6 +4572,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
     const toolsSettings = getToolsSettings();
 
+    // Calculate timeout value for Claude
+    let permissionTimeout = null;
+    if (provider === 'claude' && toolsSettings) {
+      const timeoutMode = toolsSettings.permissionTimeoutMode ?? 'duration';
+      if (timeoutMode === 'never') {
+        permissionTimeout = null;
+      } else {
+        const seconds = toolsSettings.permissionTimeout ?? 60;
+        permissionTimeout = seconds * 1000; // Convert to milliseconds
+      }
+    }
+
     // Send command based on provider
     if (provider === 'cursor') {
       // Send Cursor command (always use cursor-command; include resume/sessionId when replying)
@@ -4548,7 +4627,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           cwd: selectedProject.fullPath,
           sessionId: currentSessionId,
           resume: !!currentSessionId,
-          toolsSettings: toolsSettings,
+          toolsSettings: {
+            ...toolsSettings,
+            permissionTimeout: permissionTimeout
+          },
           permissionMode: permissionMode,
           model: claudeModel,
           images: uploadedImages // Pass images to backend
@@ -4592,6 +4674,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
 
     validIds.forEach((requestId) => {
+      // Clear countdown timer
+      if (countdownIntervalsRef.current[requestId]) {
+        clearInterval(countdownIntervalsRef.current[requestId]);
+        delete countdownIntervalsRef.current[requestId];
+      }
+
       sendMessage({
         type: 'claude-permission-response',
         requestId,
@@ -4600,6 +4688,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         message: decision?.message,
         rememberEntry: decision?.rememberEntry
       });
+    });
+
+    // Clear countdown state for all processed requests
+    setPermissionCountdowns(prev => {
+      const updated = { ...prev };
+      validIds.forEach(id => {
+        delete updated[id];
+      });
+      return updated;
     });
 
     setPendingPermissionRequests(prev => {
@@ -5280,23 +5377,42 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     .map(item => item.requestId)
                   : [request.requestId];
 
+                // Get countdown for this request
+                const countdown = permissionCountdowns[request.requestId];
+
                 return (
                   <div
                     key={request.requestId}
                     className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 shadow-sm"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
+                      <div className="flex-1">
                         <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
                           Permission required
                         </div>
                         <div className="text-xs text-amber-800 dark:text-amber-200">
                           Tool: <span className="font-mono">{request.toolName}</span>
                         </div>
+                        {permissionEntry && (
+                          <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                            Allow rule: <span className="font-mono">{permissionEntry}</span>
+                          </div>
+                        )}
                       </div>
-                      {permissionEntry && (
-                        <div className="text-xs text-amber-700 dark:text-amber-300">
-                          Allow rule: <span className="font-mono">{permissionEntry}</span>
+
+                      {/* Countdown timer display */}
+                      {countdown !== undefined && (
+                        <div className="flex flex-col items-end">
+                          <div className="text-xs text-amber-600 dark:text-amber-400 mb-1">
+                            Time remaining
+                          </div>
+                          <div className={`text-lg font-mono font-bold px-3 py-1 rounded transition-colors ${
+                            countdown <= 10
+                              ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                              : 'bg-amber-100 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200'
+                          }`}>
+                            {countdown}s
+                          </div>
                         </div>
                       )}
                     </div>

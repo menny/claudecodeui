@@ -53,6 +53,7 @@ function waitForToolApproval(requestId, options = {}) {
 
   return new Promise(resolve => {
     let settled = false;
+    let timeout;
 
     const finalize = (decision) => {
       if (settled) return;
@@ -63,7 +64,7 @@ function waitForToolApproval(requestId, options = {}) {
 
     const cleanup = () => {
       pendingToolApprovals.delete(requestId);
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       if (signal && abortHandler) {
         signal.removeEventListener('abort', abortHandler);
       }
@@ -71,10 +72,13 @@ function waitForToolApproval(requestId, options = {}) {
 
     // Timeout is local to this process; it does not override SDK timing.
     // It exists to prevent the UI prompt from lingering indefinitely.
-    const timeout = setTimeout(() => {
-      onCancel?.('timeout');
-      finalize(null);
-    }, timeoutMs);
+    // If timeoutMs is null or undefined, wait indefinitely.
+    if (timeoutMs !== null && timeoutMs !== undefined) {
+      timeout = setTimeout(() => {
+        onCancel?.('timeout');
+        finalize(null);
+      }, timeoutMs);
+    }
 
     const abortHandler = () => {
       // If the SDK cancels the control request, stop waiting to avoid
@@ -195,6 +199,23 @@ function mapCliOptionsToSDK(options = {}) {
   // Map disallowed tools (always set so the SDK doesn't treat "undefined" as permissive).
   // This does not override allowlists; it only feeds the canUseTool gate.
   sdkOptions.disallowedTools = settings.disallowedTools || [];
+
+  // Map permission timeout settings
+  sdkOptions.permissionTimeout = settings.permissionTimeout ?? null;
+
+  // Validate timeout bounds (5 seconds to 1 day)
+  if (sdkOptions.permissionTimeout !== null && sdkOptions.permissionTimeout !== undefined) {
+    const MIN_TIMEOUT = 5000;      // 5 seconds
+    const MAX_TIMEOUT = 86400000;  // 1 day (24 hours * 60 minutes * 60 seconds * 1000ms)
+
+    if (sdkOptions.permissionTimeout < MIN_TIMEOUT) {
+      console.warn(`Permission timeout ${sdkOptions.permissionTimeout}ms is below minimum, setting to ${MIN_TIMEOUT}ms`);
+      sdkOptions.permissionTimeout = MIN_TIMEOUT;
+    } else if (sdkOptions.permissionTimeout > MAX_TIMEOUT) {
+      console.warn(`Permission timeout ${sdkOptions.permissionTimeout}ms exceeds maximum, setting to ${MAX_TIMEOUT}ms`);
+      sdkOptions.permissionTimeout = MAX_TIMEOUT;
+    }
+  }
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
@@ -519,12 +540,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
         requestId,
         toolName,
         input,
-        sessionId: capturedSessionId || sessionId || null
+        sessionId: capturedSessionId || sessionId || null,
+        timeoutSeconds: sdkOptions.permissionTimeout !== null ? Math.floor(sdkOptions.permissionTimeout / 1000) : null
       });
 
       // Wait for the UI; if the SDK cancels, notify the UI so it can dismiss the banner.
       // This does not retry or resurface the prompt; it just reflects the cancellation.
       const decision = await waitForToolApproval(requestId, {
+        timeoutMs: sdkOptions.permissionTimeout,
         signal: context?.signal,
         onCancel: (reason) => {
           ws.send({

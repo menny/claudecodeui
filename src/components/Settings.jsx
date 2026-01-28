@@ -29,6 +29,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
   const [newAllowedTool, setNewAllowedTool] = useState('');
   const [newDisallowedTool, setNewDisallowedTool] = useState('');
   const [skipPermissions, setSkipPermissions] = useState(false);
+  const [permissionTimeoutMode, setPermissionTimeoutMode] = useState('duration');
+  const [permissionTimeout, setPermissionTimeout] = useState(60);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
@@ -541,12 +543,16 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         setAllowedTools(settings.allowedTools || []);
         setDisallowedTools(settings.disallowedTools || []);
         setSkipPermissions(settings.skipPermissions || false);
+        setPermissionTimeoutMode(settings.permissionTimeoutMode ?? 'duration');
+        setPermissionTimeout(settings.permissionTimeout ?? 60);
         setProjectSortOrder(settings.projectSortOrder || 'name');
       } else {
         // Set defaults
         setAllowedTools([]);
         setDisallowedTools([]);
         setSkipPermissions(false);
+        setPermissionTimeoutMode('duration');
+        setPermissionTimeout(60);
         setProjectSortOrder('name');
       }
       
@@ -727,6 +733,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         allowedTools,
         disallowedTools,
         skipPermissions,
+        permissionTimeoutMode,
+        permissionTimeout,
         projectSortOrder,
         lastUpdated: new Date().toISOString()
       };
@@ -1379,6 +1387,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                         setNewAllowedTool={setNewAllowedTool}
                         newDisallowedTool={newDisallowedTool}
                         setNewDisallowedTool={setNewDisallowedTool}
+                        permissionTimeoutMode={permissionTimeoutMode}
+                        setPermissionTimeoutMode={setPermissionTimeoutMode}
+                        permissionTimeout={permissionTimeout}
+                        setPermissionTimeout={setPermissionTimeout}
                       />
                     )}
 

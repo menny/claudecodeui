@@ -49,6 +49,10 @@ function ClaudePermissions({
   setNewAllowedTool,
   newDisallowedTool,
   setNewDisallowedTool,
+  permissionTimeoutMode,
+  setPermissionTimeoutMode,
+  permissionTimeout,
+  setPermissionTimeout,
 }) {
   const { t } = useTranslation('settings');
   const addAllowedTool = (tool) => {
@@ -100,6 +104,83 @@ function ClaudePermissions({
               </div>
             </div>
           </label>
+        </div>
+      </div>
+
+      {/* Timeout Duration Setting */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium text-foreground">
+          Permission Request Timeout
+        </h3>
+        <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+          {/* Radio Option 1: No timeout */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="permissionTimeoutMode"
+              checked={permissionTimeoutMode === 'never'}
+              onChange={() => setPermissionTimeoutMode('never')}
+              className="w-4 h-4 text-blue-600"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Never timeout (wait indefinitely)
+            </span>
+          </label>
+
+          {/* Radio Option 2: Timeout with duration */}
+          <div>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="permissionTimeoutMode"
+                checked={permissionTimeoutMode === 'duration'}
+                onChange={() => setPermissionTimeoutMode('duration')}
+                className="w-4 h-4 text-blue-600 mt-0.5"
+              />
+              <div className="flex-1">
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Timeout after
+                </span>
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="number"
+                    min="5"
+                    max="86400"
+                    value={permissionTimeout || 60}
+                    disabled={permissionTimeoutMode === 'never'}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      const MAX_TIMEOUT = 86400; // 1 day in seconds
+                      if (value >= 5 || e.target.value === '') {
+                        // Clamp value between 5 and 86400 (1 day)
+                        const clampedValue = Math.min(Math.max(value, 5), MAX_TIMEOUT);
+                        setPermissionTimeout(clampedValue || 60);
+                      }
+                    }}
+                    onFocus={() => {
+                      // Auto-select this radio option when input is focused
+                      if (permissionTimeoutMode !== 'duration') {
+                        setPermissionTimeoutMode('duration');
+                      }
+                    }}
+                    className="w-20 px-3 py-1.5 border border-gray-300 dark:border-gray-600
+                               rounded-md bg-white dark:bg-gray-700 text-gray-900
+                               dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed
+                               text-sm"
+                    placeholder="60"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-400">seconds</span>
+                </div>
+              </div>
+            </label>
+
+            {/* Helper text */}
+            <p className="mt-2 ml-7 text-xs text-gray-500 dark:text-gray-400">
+              {permissionTimeoutMode === 'never'
+                ? "Permission requests will wait indefinitely for your response"
+                : `Permission requests will timeout after ${permissionTimeout || 60} seconds (min: 5s, max: 1 day)`}
+            </p>
+          </div>
         </div>
       </div>
 
