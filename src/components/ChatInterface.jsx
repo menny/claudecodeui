@@ -551,9 +551,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
       {message.type === 'user' ? (
-        /* User message bubble on the right */
-        <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial">
+        /* User message on the right */
+        <div className="w-full flex flex-col items-end">
+          {!isGrouped && (
+            <div className="hidden sm:flex mb-2">
+              <UserAvatar />
+            </div>
+          )}
+          <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
             <div className="text-sm whitespace-pre-wrap break-words">
               {message.content}
             </div>
@@ -574,11 +579,6 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               {new Date(message.timestamp).toLocaleTimeString()}
             </div>
           </div>
-          {!isGrouped && (
-            <div className="hidden sm:flex">
-              <UserAvatar />
-            </div>
-          )}
         </div>
       ) : (
         /* Claude/Error/Tool messages on the left */
