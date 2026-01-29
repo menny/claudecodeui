@@ -31,6 +31,7 @@ import CodexLogo from './CodexLogo.jsx';
 import UserAvatar from './UserAvatar.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
 import ClaudeStatus from './ClaudeStatus';
@@ -1869,7 +1870,39 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
 function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
+  const { user } = useAuth();
   const { t } = useTranslation('chat');
+
+  // Get user initials for scroll button badge
+  const [userInitials, setUserInitials] = useState('U');
+
+  useEffect(() => {
+    const fetchUserInitials = async () => {
+      try {
+        const response = await authenticatedFetch('/api/user/git-config');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.gitName) {
+            const parts = data.gitName.trim().split(/\s+/);
+            const initials = parts.length === 1
+              ? parts[0].charAt(0).toUpperCase()
+              : (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+            setUserInitials(initials);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user initials:', error);
+      }
+
+      // Fallback to username
+      if (user?.username) {
+        setUserInitials(user.username.charAt(0).toUpperCase());
+      }
+    };
+
+    fetchUserInitials();
+  }, [user]);
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -2962,6 +2995,54 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       // Don't reset isUserScrolledUp here - let the scroll handler manage it
       // This prevents fighting with user's scroll position during streaming
+    }
+  }, []);
+
+  // Scroll to the previous user message
+  const scrollToPreviousUserMessage = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+
+    const container = scrollContainerRef.current;
+    const viewportTop = container.scrollTop;
+    const messageElements = Array.from(container.querySelectorAll('.chat-message.user'));
+
+    if (messageElements.length === 0) return;
+
+    // Find the previous user message that is completely above the current viewport
+    let targetMessage = null;
+
+    // First, look for a message whose bottom is completely above viewport
+    for (let i = messageElements.length - 1; i >= 0; i--) {
+      const messageTop = messageElements[i].offsetTop;
+      const messageBottom = messageTop + messageElements[i].offsetHeight;
+
+      if (messageBottom < viewportTop - 20) {
+        targetMessage = messageElements[i];
+        break;
+      }
+    }
+
+    // If none found, look for a message that starts above viewport
+    if (!targetMessage) {
+      for (let i = messageElements.length - 1; i >= 0; i--) {
+        if (messageElements[i].offsetTop < viewportTop - 20) {
+          targetMessage = messageElements[i];
+          break;
+        }
+      }
+    }
+
+    // If still none, use the first message
+    if (!targetMessage) {
+      targetMessage = messageElements[0];
+    }
+
+    // Scroll to the target message with offset
+    if (targetMessage) {
+      const newScrollTop = Math.max(0, targetMessage.offsetTop - 20);
+      if (Math.abs(newScrollTop - container.scrollTop) > 5) {
+        container.scrollTop = newScrollTop;
+      }
     }
   }, []);
 
@@ -5596,17 +5677,35 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </button>
             )}
 
-            {/* Scroll to bottom button - positioned next to mode indicator */}
+            {/* Scroll navigation buttons - appear when user scrolls up */}
             {isUserScrolledUp && chatMessages.length > 0 && (
-              <button
-                onClick={scrollToBottom}
-                className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
-                title="Scroll to bottom"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                </svg>
-              </button>
+              <>
+                {/* Scroll to previous user message button */}
+                <button
+                  onClick={scrollToPreviousUserMessage}
+                  className="relative w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+                  title="Scroll to previous user message"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  </svg>
+                  {/* User initials badge */}
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 text-[8px] font-bold border border-blue-600 dark:border-blue-400">
+                    {userInitials}
+                  </div>
+                </button>
+
+                {/* Scroll to bottom button */}
+                <button
+                  onClick={scrollToBottom}
+                  className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+                  title="Scroll to bottom"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </button>
+              </>
             )}
           </div>
         </div>
