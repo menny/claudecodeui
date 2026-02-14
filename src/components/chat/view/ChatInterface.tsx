@@ -104,6 +104,7 @@ function ChatInterface({
     createDiff,
     scrollContainerRef,
     scrollToBottom,
+    scrollToPreviousUserMessage,
     handleScroll,
   } = useChatSessionState({
     selectedProject,
