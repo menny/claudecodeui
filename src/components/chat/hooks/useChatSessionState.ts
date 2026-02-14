@@ -88,6 +88,10 @@ export function useChatSessionState({
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
+  const loadEarlierMessages = useCallback(() => {
+    setVisibleMessageCount((previousCount) => previousCount + 100);
+  }, []);
+
   const loadSessionMessages = useCallback(
     async (projectName: string, sessionId: string, loadMore = false, provider: Provider | string = 'claude') => {
       if (!projectName || !sessionId) {
@@ -189,45 +193,62 @@ export function useChatSessionState({
     const viewportTop = container.scrollTop;
     const messageElements = Array.from(container.querySelectorAll('.chat-message.user'));
 
-    if (messageElements.length === 0) return;
+    if (messageElements.length === 0) {
+      // If no messages in DOM but we have more in memory, load them
+      if (chatMessages.length > visibleMessageCount) {
+        loadEarlierMessages();
+      }
+      return;
+    }
 
     // Find the previous user message that is completely above the current viewport
     let targetMessage = null;
 
     // First, look for a message whose bottom is completely above viewport
     for (let i = messageElements.length - 1; i >= 0; i--) {
-      const messageTop = (messageElements[i] as HTMLElement).offsetTop;
-      const messageBottom = messageTop + (messageElements[i] as HTMLElement).offsetHeight;
+      const el = messageElements[i] as HTMLElement;
+      const messageTop = el.offsetTop;
+      const messageBottom = messageTop + el.offsetHeight;
 
-      if (messageBottom < viewportTop - 20) {
-        targetMessage = messageElements[i] as HTMLElement;
+      // Use a slightly larger buffer to ensure we actually jump to a PREVIOUS message
+      if (messageBottom < viewportTop - 10) {
+        targetMessage = el;
         break;
       }
     }
 
-    // If none found, look for a message that starts above viewport
+    // If none found above viewport, it means we are either at the top of current DOM
+    // or the first user message is currently visible.
     if (!targetMessage) {
-      for (let i = messageElements.length - 1; i >= 0; i--) {
-        if ((messageElements[i] as HTMLElement).offsetTop < viewportTop - 20) {
-          targetMessage = messageElements[i] as HTMLElement;
-          break;
+      // If we are already near the top of the container, try to load more history
+      if (viewportTop < 100) {
+        if (hasMoreMessages) {
+          loadOlderMessages(container);
+        } else if (chatMessages.length > visibleMessageCount) {
+          loadEarlierMessages();
         }
       }
-    }
-
-    // If still none, use the first message
-    if (!targetMessage) {
+      
+      // Fallback to the first message in DOM if we haven't found anything yet
       targetMessage = messageElements[0] as HTMLElement;
     }
 
     // Scroll to the target message with offset
     if (targetMessage) {
       const newScrollTop = Math.max(0, targetMessage.offsetTop - 20);
+      // Ensure we actually move, or if we are already there, try to load more
       if (Math.abs(newScrollTop - container.scrollTop) > 5) {
         container.scrollTop = newScrollTop;
+      } else if (newScrollTop < 50) {
+        // If we are already at the top message, trigger loading more
+        if (hasMoreMessages) {
+          loadOlderMessages(container);
+        } else if (chatMessages.length > visibleMessageCount) {
+          loadEarlierMessages();
+        }
       }
     }
-  }, []);
+  }, [chatMessages.length, hasMoreMessages, loadEarlierMessages, loadOlderMessages, visibleMessageCount]);
 
   const isNearBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -235,7 +256,8 @@ export function useChatSessionState({
       return false;
     }
     const { scrollTop, scrollHeight, clientHeight } = container;
-    return scrollHeight - scrollTop - clientHeight < 50;
+    // Allow a bit more buffer for bottom detection
+    return scrollHeight - scrollTop - clientHeight < 100;
   }, []);
 
   const loadOlderMessages = useCallback(
@@ -243,6 +265,21 @@ export function useChatSessionState({
       if (!container || isLoadingMoreRef.current || isLoadingMoreMessages) {
         return false;
       }
+
+      // First check if we have more messages already in memory but not shown
+      if (chatMessages.length > visibleMessageCount) {
+        const previousScrollHeight = container.scrollHeight;
+        const previousScrollTop = container.scrollTop;
+
+        pendingScrollRestoreRef.current = {
+          height: previousScrollHeight,
+          top: previousScrollTop,
+        };
+
+        loadEarlierMessages();
+        return true;
+      }
+
       if (!hasMoreMessages || !selectedSession || !selectedProject) {
         return false;
       }
@@ -280,12 +317,12 @@ export function useChatSessionState({
         isLoadingMoreRef.current = false;
       }
     },
-    [hasMoreMessages, isLoadingMoreMessages, loadSessionMessages, selectedProject, selectedSession],
+    [chatMessages.length, hasMoreMessages, isLoadingMoreMessages, loadEarlierMessages, loadSessionMessages, selectedProject, selectedSession, visibleMessageCount],
   );
 
   const handleScroll = useCallback(async () => {
     const container = scrollContainerRef.current;
-    if (!container) {
+    if (!container || pendingInitialScrollRef.current) {
       return;
     }
 
@@ -323,7 +360,7 @@ export function useChatSessionState({
     const scrollDiff = newScrollHeight - height;
     container.scrollTop = top + Math.max(scrollDiff, 0);
     pendingScrollRestoreRef.current = null;
-  }, [chatMessages.length]);
+  }, [chatMessages.length, visibleMessageCount]);
 
   useEffect(() => {
     pendingInitialScrollRef.current = true;
@@ -343,9 +380,9 @@ export function useChatSessionState({
       return;
     }
 
-    pendingInitialScrollRef.current = false;
     setTimeout(() => {
       scrollToBottom();
+      pendingInitialScrollRef.current = false;
     }, 200);
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
 
@@ -617,10 +654,6 @@ export function useChatSessionState({
       setCanAbortSession(true);
     }
   }, [currentSessionId, isLoading, processingSessions, selectedSession?.id]);
-
-  const loadEarlierMessages = useCallback(() => {
-    setVisibleMessageCount((previousCount) => previousCount + 100);
-  }, []);
 
   return {
     chatMessages,
