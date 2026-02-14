@@ -58,6 +58,7 @@ interface ChatComposerProps {
   isUserScrolledUp: boolean;
   hasMessages: boolean;
   onScrollToBottom: () => void;
+  onScrollToPreviousUserMessage: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
   attachedImages: File[];
@@ -115,6 +116,7 @@ export default function ChatComposer({
   isUserScrolledUp,
   hasMessages,
   onScrollToBottom,
+  onScrollToPreviousUserMessage,
   onSubmit,
   isDragActive,
   attachedImages,
@@ -199,6 +201,7 @@ export default function ChatComposer({
           isUserScrolledUp={isUserScrolledUp}
           hasMessages={hasMessages}
           onScrollToBottom={onScrollToBottom}
+          onScrollToPreviousUserMessage={onScrollToPreviousUserMessage}
         />}
       </div>
 

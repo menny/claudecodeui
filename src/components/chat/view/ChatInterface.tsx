@@ -334,6 +334,7 @@ function ChatInterface({
           isUserScrolledUp={isUserScrolledUp}
           hasMessages={chatMessages.length > 0}
           onScrollToBottom={scrollToBottom}
+          onScrollToPreviousUserMessage={scrollToPreviousUserMessage}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
           attachedImages={attachedImages}

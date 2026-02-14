@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ThinkingModeSelector from './ThinkingModeSelector';
 import TokenUsagePie from './TokenUsagePie';
 import type { PermissionMode, Provider } from '../../types/types';
+import { useUserInitials } from '../../hooks/useUserInitials';
 
 interface ChatInputControlsProps {
   permissionMode: PermissionMode | string;
@@ -18,6 +19,7 @@ interface ChatInputControlsProps {
   isUserScrolledUp: boolean;
   hasMessages: boolean;
   onScrollToBottom: () => void;
+  onScrollToPreviousUserMessage: () => void;
 }
 
 export default function ChatInputControls({
@@ -34,8 +36,10 @@ export default function ChatInputControls({
   isUserScrolledUp,
   hasMessages,
   onScrollToBottom,
+  onScrollToPreviousUserMessage,
 }: ChatInputControlsProps) {
   const { t } = useTranslation('chat');
+  const userInitials = useUserInitials();
 
   return (
     <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
@@ -122,15 +126,33 @@ export default function ChatInputControls({
       )}
 
       {isUserScrolledUp && hasMessages && (
-        <button
-          onClick={onScrollToBottom}
-          className="w-7 h-7 sm:w-8 sm:h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg shadow-sm flex items-center justify-center transition-all duration-200 hover:scale-105"
-          title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
-        >
-          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-          </svg>
-        </button>
+        <>
+          {/* Scroll to previous user message button */}
+          <button
+            onClick={onScrollToPreviousUserMessage}
+            className="relative w-7 h-7 sm:w-8 sm:h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg shadow-sm flex items-center justify-center transition-all duration-200 hover:scale-105"
+            title="Scroll to previous user message"
+          >
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+            {/* User initials badge */}
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-card rounded-full flex items-center justify-center text-primary text-[8px] font-bold border border-primary">
+              {userInitials}
+            </div>
+          </button>
+
+          {/* Scroll to bottom button */}
+          <button
+            onClick={onScrollToBottom}
+            className="w-7 h-7 sm:w-8 sm:h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg shadow-sm flex items-center justify-center transition-all duration-200 hover:scale-105"
+            title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
+          >
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+        </>
       )}
     </div>
   );
