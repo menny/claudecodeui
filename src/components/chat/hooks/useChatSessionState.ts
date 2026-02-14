@@ -88,8 +88,22 @@ export function useChatSessionState({
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
+  const convertedMessages = useMemo(() => {
+    return convertSessionMessages(sessionMessages);
+  }, [sessionMessages]);
+
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((previousCount) => previousCount + 100);
+  }, []);
+
+  const isNearBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return false;
+    }
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    // Allow a bit more buffer for bottom detection
+    return scrollHeight - scrollTop - clientHeight < 100;
   }, []);
 
   const loadSessionMessages = useCallback(
@@ -150,6 +164,66 @@ export function useChatSessionState({
     [],
   );
 
+  const loadOlderMessages = useCallback(
+    async (container: HTMLDivElement) => {
+      if (!container || isLoadingMoreRef.current || isLoadingMoreMessages) {
+        return false;
+      }
+
+      // First check if we have more messages already in memory but not shown
+      if (chatMessages.length > visibleMessageCount) {
+        const previousScrollHeight = container.scrollHeight;
+        const previousScrollTop = container.scrollTop;
+
+        pendingScrollRestoreRef.current = {
+          height: previousScrollHeight,
+          top: previousScrollTop,
+        };
+
+        loadEarlierMessages();
+        return true;
+      }
+
+      if (!hasMoreMessages || !selectedSession || !selectedProject) {
+        return false;
+      }
+
+      const sessionProvider = selectedSession.__provider || 'claude';
+      if (sessionProvider === 'cursor') {
+        return false;
+      }
+
+      isLoadingMoreRef.current = true;
+      const previousScrollHeight = container.scrollHeight;
+      const previousScrollTop = container.scrollTop;
+
+      try {
+        const moreMessages = await loadSessionMessages(
+          selectedProject.name,
+          selectedSession.id,
+          true,
+          sessionProvider,
+        );
+
+        if (moreMessages.length === 0) {
+          return false;
+        }
+
+        pendingScrollRestoreRef.current = {
+          height: previousScrollHeight,
+          top: previousScrollTop,
+        };
+        setSessionMessages((previous) => [...moreMessages, ...previous]);
+        // Keep the rendered window in sync with top-pagination so newly loaded history becomes visible.
+        setVisibleMessageCount((previousCount) => previousCount + moreMessages.length);
+        return true;
+      } finally {
+        isLoadingMoreRef.current = false;
+      }
+    },
+    [chatMessages.length, hasMoreMessages, isLoadingMoreMessages, loadEarlierMessages, loadSessionMessages, selectedProject, selectedSession, visibleMessageCount],
+  );
+
   const loadCursorSessionMessages = useCallback(async (projectPath: string, sessionId: string) => {
     if (!projectPath || !sessionId) {
       return [] as ChatMessage[];
@@ -173,10 +247,6 @@ export function useChatSessionState({
       setIsLoadingSessionMessages(false);
     }
   }, []);
-
-  const convertedMessages = useMemo(() => {
-    return convertSessionMessages(sessionMessages);
-  }, [sessionMessages]);
 
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -249,76 +319,6 @@ export function useChatSessionState({
       }
     }
   }, [chatMessages.length, hasMoreMessages, loadEarlierMessages, loadOlderMessages, visibleMessageCount]);
-
-  const isNearBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) {
-      return false;
-    }
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    // Allow a bit more buffer for bottom detection
-    return scrollHeight - scrollTop - clientHeight < 100;
-  }, []);
-
-  const loadOlderMessages = useCallback(
-    async (container: HTMLDivElement) => {
-      if (!container || isLoadingMoreRef.current || isLoadingMoreMessages) {
-        return false;
-      }
-
-      // First check if we have more messages already in memory but not shown
-      if (chatMessages.length > visibleMessageCount) {
-        const previousScrollHeight = container.scrollHeight;
-        const previousScrollTop = container.scrollTop;
-
-        pendingScrollRestoreRef.current = {
-          height: previousScrollHeight,
-          top: previousScrollTop,
-        };
-
-        loadEarlierMessages();
-        return true;
-      }
-
-      if (!hasMoreMessages || !selectedSession || !selectedProject) {
-        return false;
-      }
-
-      const sessionProvider = selectedSession.__provider || 'claude';
-      if (sessionProvider === 'cursor') {
-        return false;
-      }
-
-      isLoadingMoreRef.current = true;
-      const previousScrollHeight = container.scrollHeight;
-      const previousScrollTop = container.scrollTop;
-
-      try {
-        const moreMessages = await loadSessionMessages(
-          selectedProject.name,
-          selectedSession.id,
-          true,
-          sessionProvider,
-        );
-
-        if (moreMessages.length === 0) {
-          return false;
-        }
-
-        pendingScrollRestoreRef.current = {
-          height: previousScrollHeight,
-          top: previousScrollTop,
-        };
-        setSessionMessages((previous) => [...moreMessages, ...previous]);
-        // Keep the rendered window in sync with top-pagination so newly loaded history becomes visible.
-        setVisibleMessageCount((previousCount) => previousCount + moreMessages.length);
-        return true;
-      } finally {
-        isLoadingMoreRef.current = false;
-      }
-    },
-    [chatMessages.length, hasMoreMessages, isLoadingMoreMessages, loadEarlierMessages, loadSessionMessages, selectedProject, selectedSession, visibleMessageCount],
-  );
 
   const handleScroll = useCallback(async () => {
     const container = scrollContainerRef.current;
