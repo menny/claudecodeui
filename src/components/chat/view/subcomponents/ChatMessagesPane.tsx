@@ -178,13 +178,14 @@ export default function ChatMessagesPane({
             </div>
           )}
 
-          {visibleMessages.map((message, index) => {
-            const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
+          {visibleMessages.map((message, sliceIndex) => {
+            const globalIndex = chatMessages.indexOf(message);
+            const prevMessage = globalIndex > 0 ? chatMessages[globalIndex - 1] : null;
             return (
               <MessageComponent
                 key={getMessageKey(message)}
                 message={message}
-                index={index}
+                index={globalIndex}
                 prevMessage={prevMessage}
                 createDiff={createDiff}
                 onFileOpen={onFileOpen}

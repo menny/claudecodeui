@@ -85,6 +85,7 @@ export function useChatSessionState({
   const pendingInitialScrollRef = useRef(true);
   const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
+  const pendingScrollToMessageRef = useRef<number | null>(null);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
@@ -257,68 +258,71 @@ export function useChatSessionState({
   }, []);
 
   const scrollToPreviousUserMessage = useCallback(() => {
-    if (!scrollContainerRef.current) return;
+    if (!scrollContainerRef.current || chatMessages.length === 0) return;
 
     const container = scrollContainerRef.current;
     const viewportTop = container.scrollTop;
-    const messageElements = Array.from(container.querySelectorAll('.chat-message.user'));
+    
+    // Find all rendered chat message elements
+    const messageElements = Array.from(container.querySelectorAll('.chat-message[data-message-index]'));
+    if (messageElements.length === 0) return;
 
-    if (messageElements.length === 0) {
-      // If no messages in DOM but we have more in memory, load them
-      if (chatMessages.length > visibleMessageCount) {
-        loadEarlierMessages();
-      }
-      return;
-    }
-
-    // Find the previous user message that is completely above the current viewport
-    let targetMessage = null;
-
-    // First, look for a message whose bottom is completely above viewport
-    for (let i = messageElements.length - 1; i >= 0; i--) {
+    // Find the first message element that is partially or fully in viewport
+    let firstVisibleGlobalIndex = -1;
+    for (let i = 0; i < messageElements.length; i++) {
       const el = messageElements[i] as HTMLElement;
-      const messageTop = el.offsetTop;
-      const messageBottom = messageTop + el.offsetHeight;
-
-      // Use a slightly larger buffer to ensure we actually jump to a PREVIOUS message
-      if (messageBottom < viewportTop - 10) {
-        targetMessage = el;
+      if (el.offsetTop + el.offsetHeight > viewportTop + 10) {
+        firstVisibleGlobalIndex = parseInt(el.getAttribute('data-message-index') || '-1', 10);
         break;
       }
     }
 
-    // If none found above viewport, it means we are either at the top of current DOM
-    // or the first user message is currently visible.
-    if (!targetMessage) {
-      // If we are already near the top of the container, try to load more history
-      if (viewportTop < 100) {
-        if (hasMoreMessages) {
-          loadOlderMessages(container);
-        } else if (chatMessages.length > visibleMessageCount) {
-          loadEarlierMessages();
-        }
-      }
-      
-      // Fallback to the first message in DOM if we haven't found anything yet
-      targetMessage = messageElements[0] as HTMLElement;
+    if (firstVisibleGlobalIndex === -1) {
+      // Fallback: use the last message's index
+      const lastEl = messageElements[messageElements.length - 1] as HTMLElement;
+      firstVisibleGlobalIndex = parseInt(lastEl.getAttribute('data-message-index') || '-1', 10);
     }
 
-    // Scroll to the target message with offset
-    if (targetMessage) {
-      const newScrollTop = Math.max(0, targetMessage.offsetTop - 20);
-      // Ensure we actually move, or if we are already there, try to load more
-      if (Math.abs(newScrollTop - container.scrollTop) > 5) {
-        container.scrollTop = newScrollTop;
-      } else if (newScrollTop < 50) {
-        // If we are already at the top message, trigger loading more
-        if (hasMoreMessages) {
-          loadOlderMessages(container);
-        } else if (chatMessages.length > visibleMessageCount) {
-          loadEarlierMessages();
-        }
+    console.log('[ScrollDebug] scrollToPreviousUserMessage', {
+      viewportTop,
+      firstVisibleGlobalIndex,
+      totalChatMessages: chatMessages.length
+    });
+
+    // Search backwards in the global chatMessages array starting from the message BEFORE the first visible one
+    let targetGlobalIndex = -1;
+    for (let i = firstVisibleGlobalIndex - 1; i >= 0; i--) {
+      if (chatMessages[i].type === 'user') {
+        targetGlobalIndex = i;
+        break;
       }
     }
-  }, [chatMessages.length, hasMoreMessages, loadEarlierMessages, loadOlderMessages, visibleMessageCount]);
+
+    if (targetGlobalIndex === -1) {
+      console.log('[ScrollDebug] No earlier user message found in loaded history');
+      if (hasMoreMessages) {
+        console.log('[ScrollDebug] Triggering server load');
+        loadOlderMessages(container);
+      }
+      return;
+    }
+
+    console.log('[ScrollDebug] Target user message found at global index', targetGlobalIndex);
+
+    // Is it rendered?
+    const targetEl = container.querySelector(`[data-message-index="${targetGlobalIndex}"]`) as HTMLElement;
+    if (targetEl) {
+      console.log('[ScrollDebug] Scrolling to rendered message element');
+      container.scrollTop = Math.max(0, targetEl.offsetTop - 20);
+    } else {
+      // Need to load more messages into DOM
+      console.log('[ScrollDebug] Message not rendered, increasing visible count');
+      pendingScrollToMessageRef.current = targetGlobalIndex;
+      // Ensure the count is high enough
+      const requiredCount = chatMessages.length - targetGlobalIndex + 10;
+      setVisibleMessageCount(prev => Math.max(prev + 100, requiredCount));
+    }
+  }, [chatMessages, hasMoreMessages, loadOlderMessages]);
 
   const handleScroll = useCallback(async () => {
     const container = scrollContainerRef.current;
@@ -350,16 +354,32 @@ export function useChatSessionState({
   }, [isNearBottom, loadOlderMessages]);
 
   useLayoutEffect(() => {
-    if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) {
+    const container = scrollContainerRef.current;
+    if (!container || chatMessages.length === 0) return;
+
+    // Handle scroll restoration (for pagination)
+    if (pendingScrollRestoreRef.current) {
+      const { height, top } = pendingScrollRestoreRef.current;
+      const newScrollHeight = container.scrollHeight;
+      const scrollDiff = newScrollHeight - height;
+      container.scrollTop = top + Math.max(scrollDiff, 0);
+      pendingScrollRestoreRef.current = null;
       return;
     }
 
-    const { height, top } = pendingScrollRestoreRef.current;
-    const container = scrollContainerRef.current;
-    const newScrollHeight = container.scrollHeight;
-    const scrollDiff = newScrollHeight - height;
-    container.scrollTop = top + Math.max(scrollDiff, 0);
-    pendingScrollRestoreRef.current = null;
+    // Handle scrolling to a specific message index (for "scroll up" robustness)
+    if (pendingScrollToMessageRef.current !== null) {
+      const targetGlobalIndex = pendingScrollToMessageRef.current;
+      
+      const targetEl = container.querySelector(`[data-message-index="${targetGlobalIndex}"]`) as HTMLElement;
+
+      if (targetEl) {
+        console.log('[ScrollDebug] Scrolling to pending message element via data-index', { targetGlobalIndex, offsetTop: targetEl.offsetTop });
+        container.scrollTop = Math.max(0, targetEl.offsetTop - 20);
+      }
+      
+      pendingScrollToMessageRef.current = null;
+    }
   }, [chatMessages.length, visibleMessageCount]);
 
   useEffect(() => {
