@@ -12,6 +12,8 @@ import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
 import type { Project } from '../../../../types/app';
 import { ToolRenderer, shouldHideToolResult } from '../../tools';
+import { useUserInitials } from '../../hooks/useUserInitials';
+import { useAuth } from '../../../../contexts/AuthContext';
 
 type DiffLine = {
   type: string;
@@ -44,6 +46,8 @@ type PermissionGrantState = 'idle' | 'granted' | 'error';
 
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
+  const userInitials = useUserInitials();
+  const { user } = useAuth();
   const isGrouped = prevMessage && prevMessage.type === message.type &&
                    ((prevMessage.type === 'assistant') ||
                     (prevMessage.type === 'user') ||
@@ -123,8 +127,13 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             </div>
           </div>
           {!isGrouped && (
-            <div className="hidden sm:flex w-8 h-8 bg-blue-600 rounded-full items-center justify-center text-white text-sm flex-shrink-0">
-              U
+            <div className="hidden sm:flex flex-col items-center gap-1 flex-shrink-0">
+              <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
+                {user?.username || 'User'}
+              </div>
+              <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                {userInitials}
+              </div>
             </div>
           )}
         </div>
